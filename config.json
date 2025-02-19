@@ -1,0 +1,19 @@
+{
+  "acme": {
+    "email": "admin@example.com",
+    "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+    "storage_path": "./certs",
+    "dns_provider": "cloudflare",
+    "renew_before": 72
+  },
+  "domains": [
+    {
+      "domain": "example.com",
+      "backend": "http://localhost:8080",
+      "certificate": {
+        "cert_path": "./certs/example.com.crt",
+        "key_path": "./certs/example.com.key"
+      }
+    }
+  ]
+}
