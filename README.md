@@ -437,3 +437,197 @@ Citations:
 [33] https://caddy.community/t/guide-for-windows-admin-center-proxy-from-linux-vm-to-server-core/7192
 [34] https://support.keriocontrol.gfi.com/hc/en-us/articles/360015190319-Configuring-the-reverse-proxy-in-Kerio-Control
 [35] https://stackoverflow.com/questions/21055182/golang-reverse-proxy-with-multiple-apps
+
+
+
+Basierend auf den Anforderungen und den Rechercheergebnissen erstellen wir eine Schritt-für-Schritt-Anleitung zur Kompilierung der Go-Anwendung für Windows:
+
+---
+
+## **Kompilierungsanleitung für Windows**
+
+### **1. Umgebung vorbereiten**
+```bash
+# Für reine Go-Projekte (ohne C-Bindungen)
+sudo apt-get install golang-go  # Linux
+brew install go                # macOS
+
+# Bei CGO-Abhängigkeiten (nicht in diesem Projekt benötigt)
+sudo apt-get install gcc-mingw-w64-x86-64  # Linux
+```
+
+### **2. Projektstruktur überprüfen**
+```
+/proxy-app
+├── main.go
+├── config.json
+├── go.mod
+└── go.sum
+```
+
+### **3. Cross-Compile Befehl (Linux/macOS → Windows)**
+```bash
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o proxy-app.exe -ldflags "-s -w" main.go
+```
+
+**Parameter-Erklärung:**
+- `GOOS=windows`: Zielbetriebssystem
+- `GOARCH=amd64`: 64-bit Architektur
+- `CGO_ENABLED=0`: Deaktiviert C-Bindungen
+- `-ldflags "-s -w"`: Reduziert Binärgröße (~30%)
+
+### **4. Alternative mit Docker (für komplexe Umgebungen)**
+```dockerfile
+# docker-build.ps1
+docker run --rm -v ${PWD}:/go/src/app -w /go/src/app golang:1.21 `
+  env GOOS=windows GOARCH=amd64 go build -o proxy-app.exe
+```
+
+### **5. Windows-spezifische Anpassungen**
+**config.json:**
+```json
+{
+  "acme": {
+    "storage_path": "C:\\ProgramData\\proxy-app\\certs",
+    ...
+  },
+  "domains": [
+    {
+      "certificate": {
+        "cert_path": "C:\\ProgramData\\proxy-app\\certs\\example.com.crt",
+        "key_path": "C:\\ProgramData\\proxy-app\\certs\\example.com.key"
+      }
+    }
+  ]
+}
+```
+
+### **6. Automatisierung mit Makefile**
+```makefile
+build-windows:
+	GOOS=windows GOARCH=amd64 go build -o bin/proxy-app.exe main.go
+
+build-all:
+	GOOS=windows GOARCH=amd64 go build -o bin/proxy-app.exe
+	GOOS=linux GOARCH=amd64 go build -o bin/proxy-app-linux
+```
+
+---
+
+## **Betrieb auf Windows**
+### **1. Voraussetzungen**
+- [x] .NET Framework 4.8
+- [x] Visual C++ Redistributable
+
+### **2. Installation als Dienst**
+```powershell
+# Mit nssm (Non-Sucking Service Manager)
+nssm install ProxyApp "C:\path\to\proxy-app.exe"
+nssm set ProxyApp AppDirectory "C:\path\to\config"
+nssm start ProxyApp
+```
+
+### **3. Firewall-Regeln**
+```powershell
+New-NetFirewallRule -DisplayName "ProxyApp HTTP" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow
+New-NetFirewallRule -DisplayName "ProxyApp HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow
+```
+
+---
+
+## **Troubleshooting**
+
+**Häufige Fehler:**
+1. **Zertifikatspfade falsch**
+   - Lösung: Absolute Pfade in config.json verwenden
+   ```json
+   "cert_path": "C:\\certs\\domain.crt"
+   ```
+
+2. **Port-Konflikte**
+   ```powershell
+   netstat -ano | findstr ":443"
+   taskkill /PID  /F
+   ```
+
+3. **ACME-Challenge Fehler**
+   ```powershell
+   # Cloudflare-API-Token prüfen
+   $env:CLOUDFLARE_API_TOKEN="your_token"
+   ```
+
+---
+
+## **Best Practices für Windows-Deployment**
+
+1. **Logging**
+   ```go
+   f, err := os.OpenFile("proxy.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+   log.SetOutput(f)
+   ```
+
+2. **Registry-Konfiguration**
+   ```powershell
+   New-ItemProperty -Path "HKLM:\Software\ProxyApp" -Name "ConfigPath" -Value "C:\config.json"
+   ```
+
+3. **Automatische Updates**
+   ```go
+   func autoUpdate() {
+       resp, _ := http.Get("https://api.github.com/repos/user/repo/releases")
+       // Vergleich der Versionen
+   }
+   ```
+
+---
+
+## **Performance-Optimierung**
+
+| Technik                 | Wirkung                     | Implementierung              |
+|-------------------------|-----------------------------|-------------------------------|
+| Lazy-Loading            | Reduzierter Startzeit       | `sync.Once` für Zertifikate  |
+| Connection Pooling      | Höherer Durchsatz           | `transport.MaxIdleConns = 100`|
+| Memory-Mapped Files     | Schneller Konfigzugriff     | `mmap.Open("config.json")`    |
+
+---
+
+Diese Anleitung kombiniert die cross-compiling Fähigkeiten von Go[1][5][7] mit Windows-spezifischen Best Practices. Die Anwendung kann direkt auf Windows-Servern eingesetzt werden und unterstützt sowohl manuelle als auch automatisierte Deployment-Szenarien.
+
+Citations:
+[1] https://tip.golang.org/wiki/WindowsCrossCompiling
+[2] https://stackoverflow.com/questions/11321668/how-to-compile-a-go-package-on-windows
+[3] https://www.youtube.com/watch?v=3GHleVVwT00
+[4] https://www.wut.de/e-505ww-02-apde-000.php
+[5] https://www.linux-magazin.de/ausgaben/2022/07/cross-compiling-mit-go/
+[6] https://www.youtube.com/watch?v=ke37apoKYps
+[7] https://stackoverflow.com/questions/41566495/golang-how-to-cross-compile-on-linux-for-windows
+[8] https://www.digitalocean.com/community/tutorials/building-go-applications-for-different-operating-systems-and-architectures
+[9] https://bitloeffel.de/DOC/golang/install-source_de.html
+[10] https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04
+[11] https://learn.microsoft.com/de-de/azure/developer/go/configure-visual-studio-code
+[12] https://www.youtube.com/watch?v=ms8PPjZS6rw
+[13] https://ankhlabs.de/glossar/go-programmieren-lernen-eine-einfache-anleitung-fuer-anfaenger/
+[14] https://opensource.com/article/21/1/go-cross-compiling
+[15] https://www.youtube.com/watch?v=bZYPQyncG0o
+[16] https://www.reddit.com/r/golang/comments/qu0322/cross_compiling_gtk_for_windows/?tl=de
+[17] https://freshman.tech/snippets/go/cross-compile-go-programs/
+[18] https://www.youtube.com/watch?v=kEb7L83767s
+[19] https://dave.cheney.net/2012/09/08/an-introduction-to-cross-compilation-with-go
+[20] https://docs.fyne.io/started/cross-compiling.html
+[21] https://github.com/wailsapp/xgobase
+[22] https://zchee.github.io/golang-wiki/GccgoCrossCompilation/
+[23] https://www.reddit.com/r/golang/comments/1g40sxi/crossplatform_building_for_armhf_from_windows_10/
+[24] https://github.com/mitchellh/gox
+[25] https://go.dev/wiki/GoArm
+[26] https://go.dev/doc/tutorial/compile-install
+[27] https://entwickler.de/go/stop-and-go
+[28] https://www.youtube.com/watch?v=P47OFLRkLUE
+[29] https://codedamn.com/news/go/how-to-compile-and-run-a-go-program
+[30] https://www.digitalocean.com/community/tutorials/how-to-build-and-install-go-programs
+[31] https://learn.microsoft.com/de-de/training/modules/go-get-started/
+[32] https://www.heise.de/ratgeber/Einstieg-in-das-Programmieren-mit-Go-Teil-1-4698506.html
+[33] https://application.wiley-vch.de/books/sample/3527719466_c01.pdf
+[34] https://opensource.archium.org/index.php/Der_Golang-Spicker
+[35] https://bitloeffel.de/DOC/golang/getting-started_de.html
+[36] https://wiki.freecad.org/Compile_on_Windows/de
+[37] https://entwickler.de/go/go-kommandozeilen-apps
